@@ -114,22 +114,21 @@ export class SearchOverlay {
 
   private buildDOM(): void {
     const [rootCls, panelCls, headerCls, titleCls, closeCls, inputRowCls, inputCls, filterBarCls, pillCls, statusCls, resultsCls] =
-      prefixed("overlay", "panel", "header", "title", "close", "input-row", "input", "filter-bar", "pill", "status", "results");
+      prefixed("overlay", "panel", "header", "logo", "close-btn", "input-row", "input", "filter-bar", "filter-btn", "status", "results");
 
     const root = el("div", [rootCls]);
     const panel = el("div", [panelCls], { role: "dialog", "aria-modal": "true", "aria-label": "Search your subscriptions" });
 
     const header = el("div", [headerCls]);
+
+    const inputRow = el("div", [inputRowCls]);
     const title = el("span", [titleCls]);
-    title.textContent = "Search your subscriptions";
+    title.textContent = "SubSearch";
+    const input = el("input", [inputCls], { type: "text", placeholder: "Search your subscriptions…" });
     const closeBtn = el("button", [closeCls], { type: "button", "aria-label": "Close" });
     closeBtn.textContent = "✕";
     closeBtn.addEventListener("click", () => this.callbacks.onClose());
-    header.append(title, closeBtn);
-
-    const inputRow = el("div", [inputRowCls]);
-    const input = el("input", [inputCls], { type: "text", placeholder: "Search your subscriptions…" });
-    inputRow.appendChild(input);
+    inputRow.append(title, input, closeBtn);
 
     const filterBar = el("div", [filterBarCls]);
     const filterBtns: HTMLButtonElement[] = [];
@@ -137,16 +136,18 @@ export class SearchOverlay {
       const btn = el("button", [pillCls], { type: "button" });
       btn.textContent = opt.label;
       btn.dataset.months = String(opt.months);
-      if (opt.months === this.activeFreshnessMonths) btn.classList.add(`${pillCls}--active`);
+      if (opt.months === this.activeFreshnessMonths) btn.classList.add(`${CSS_PREFIX}active`);
       btn.addEventListener("click", () => void this.handleFilterChange(opt.months));
       filterBar.appendChild(btn);
       filterBtns.push(btn);
     }
 
+    header.append(inputRow, filterBar);
+
     const status = el("div", [statusCls]);
     const results = el("ul", [resultsCls]);
 
-    panel.append(header, inputRow, filterBar, status, results);
+    panel.append(header, status, results);
     root.appendChild(panel);
 
     this.root = root;
@@ -175,7 +176,7 @@ export class SearchOverlay {
 
   private async handleFilterChange(months: number): Promise<void> {
     this.activeFreshnessMonths = months;
-    const activeCls = `${CSS_PREFIX}pill--active`;
+    const activeCls = `${CSS_PREFIX}active`;
     for (const btn of this.filterBtns) {
       btn.classList.toggle(activeCls, Number(btn.dataset.months) === months);
     }
@@ -229,9 +230,11 @@ export class SearchOverlay {
   }
 
   private buildResultItem(result: SearchResult): HTMLAnchorElement {
-    const [itemCls, thumbCls, metaCls, titleCls, channelCls, dateCls, badgeCls] = prefixed(
+    const [itemCls, thumbWrapCls, thumbCls, infoCls, metaCls, titleCls, channelCls, dateCls, badgeCls] = prefixed(
       "result-item",
-      "result-thumb",
+      "thumb-wrap",
+      "thumb",
+      "result-info",
       "result-meta",
       "result-title",
       "result-channel",
@@ -243,27 +246,31 @@ export class SearchOverlay {
       href: `https://www.youtube.com/watch?v=${encodeURIComponent(result.video.id)}`,
     });
 
+    const thumbWrap = el("div", [thumbWrapCls]);
     const img = el("img", [thumbCls], { loading: "lazy", decoding: "async", alt: "" });
     img.src = result.video.thumbnailUrl;
     img.addEventListener("error", () => img.replaceWith(this.buildThumbPlaceholder()), { once: true });
+    thumbWrap.appendChild(img);
 
-    const meta = el("div", [metaCls]);
+    const info = el("div", [infoCls]);
     const title = el("span", [titleCls]);
     title.textContent = result.video.title;
+    const meta = el("div", [metaCls]);
     const channel = el("span", [channelCls]);
     channel.textContent = result.video.channelName;
     const date = el("span", [dateCls]);
     date.textContent = formatRelativeDate(result.video.publishedAt);
     const badge = el("span", [badgeCls]);
     badge.textContent = result.matchReason;
-    meta.append(title, channel, date, badge);
+    meta.append(channel, date, badge);
+    info.append(title, meta);
 
-    item.append(img, meta);
+    item.append(thumbWrap, info);
     return item;
   }
 
   private buildThumbPlaceholder(): HTMLElement {
-    const placeholder = el("div", prefixed("result-thumb", "result-thumb--placeholder"));
+    const placeholder = el("div", prefixed("thumb-placeholder"));
     placeholder.textContent = "▶";
     return placeholder;
   }
