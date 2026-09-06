@@ -1,0 +1,70 @@
+{
+  "manifest_version": 3,
+  "name": "SubSearch — Search Within Subscriptions",
+  "version": "0.1.0",
+  "description": "Find videos from your subscribed YouTube channels instantly. No trending, no recommendations — just your subscriptions.",
+
+  "permissions": [
+    "identity",
+    "alarms",
+    "storage",
+    "clipboardWrite"
+  ],
+
+  "host_permissions": [
+    "https://www.youtube.com/*",
+    "https://www.googleapis.com/*"
+  ],
+
+  "oauth2": {
+    "client_id": "714551271676-qu2n7h58mc7rnd42qhiudijgrl2bqdpc.apps.googleusercontent.com",
+    "scopes": [
+      "https://www.googleapis.com/auth/youtube.readonly",
+      "https://www.googleapis.com/auth/userinfo.email",
+      "https://www.googleapis.com/auth/userinfo.profile"
+    ]
+  },
+
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'none'; style-src 'self' 'unsafe-inline'"
+  },
+
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+
+  "content_scripts": [
+    {
+      "matches": ["https://www.youtube.com/*"],
+      "js": ["content.js"],
+      "css": ["content.css"],
+      "run_at": "document_idle"
+    }
+  ],
+
+  "web_accessible_resources": [
+    {
+      "resources": ["content.css", "icons/*.png"],
+      "matches": ["https://www.youtube.com/*"]
+    }
+  ],
+
+  "options_page": "options.html",
+
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    },
+    "default_title": "SubSearch"
+  },
+
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}

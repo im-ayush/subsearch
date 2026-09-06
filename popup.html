@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SubSearch</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      width: 320px;
+      min-height: 200px;
+      background: #0f0f0f;
+      color: #fff;
+      font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 13px;
+    }
+
+    /* ── Header ── */
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 14px;
+      border-bottom: 1px solid #272727;
+      background: #111;
+      position: relative;
+    }
+    .logo { color: #ff0000; font-weight: 700; font-size: 15px; letter-spacing: -0.3px; }
+    .tagline { color: #717171; font-size: 11px; flex: 1; }
+
+    /* ── Accounts button ── */
+    .accounts-btn {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: none;
+      border: 1px solid #2a2a2a;
+      border-radius: 20px;
+      padding: 4px 10px 4px 6px;
+      cursor: pointer;
+      color: #ccc;
+      font-size: 11px;
+      font-family: inherit;
+      transition: border-color 0.15s, background 0.15s;
+      white-space: nowrap;
+      max-width: 120px;
+    }
+    .accounts-btn:hover { border-color: #444; background: #1a1a1a; }
+    .accounts-btn .acct-avatar {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: #ff0000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      font-weight: 700;
+      color: #fff;
+      flex-shrink: 0;
+      overflow: hidden;
+    }
+    .accounts-btn .acct-avatar img { width: 100%; height: 100%; object-fit: cover; }
+    .accounts-btn .acct-label {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .accounts-btn .chevron { color: #555; font-size: 9px; margin-left: 2px; flex-shrink: 0; }
+
+    /* ── Accounts dropdown ── */
+    .accounts-dropdown {
+      display: none;
+      position: absolute;
+      top: calc(100% + 4px);
+      right: 10px;
+      width: 240px;
+      background: #1c1c1c;
+      border: 1px solid #2a2a2a;
+      border-radius: 10px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+      z-index: 100;
+      overflow: hidden;
+    }
+    .accounts-dropdown.open { display: block; }
+
+    .dropdown-header {
+      padding: 12px 14px 8px;
+      font-size: 10px;
+      font-weight: 600;
+      color: #555;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      border-bottom: 1px solid #242424;
+    }
+
+    .account-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px;
+      cursor: pointer;
+      transition: background 0.12s;
+      border: none;
+      background: none;
+      width: 100%;
+      text-align: left;
+      color: #ccc;
+      font-family: inherit;
+      font-size: 12px;
+    }
+    .account-item:hover { background: #252525; }
+    .account-item.active-account { background: #1a1a2e; }
+    .account-item.active-account:hover { background: #1f1f38; }
+
+    .account-item .item-avatar {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: #ff0000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      font-weight: 700;
+      color: #fff;
+      flex-shrink: 0;
+      overflow: hidden;
+      position: relative;
+    }
+    .account-item .item-avatar img { width: 100%; height: 100%; object-fit: cover; }
+    .account-item.active-account .item-avatar::after {
+      content: '✓';
+      position: absolute;
+      bottom: -2px;
+      right: -2px;
+      width: 13px;
+      height: 13px;
+      border-radius: 50%;
+      background: #4caf50;
+      color: #fff;
+      font-size: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 1.5px solid #1c1c1c;
+      line-height: 13px;
+      text-align: center;
+    }
+
+    .account-item .item-info { flex: 1; min-width: 0; }
+    .account-item .item-name {
+      font-size: 12px;
+      color: #e0e0e0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .account-item.active-account .item-name { color: #fff; font-weight: 500; }
+    .account-item .item-email {
+      font-size: 10px;
+      color: #555;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-top: 1px;
+    }
+    .account-item .item-badge {
+      font-size: 9px;
+      color: #4caf50;
+      font-weight: 600;
+      flex-shrink: 0;
+    }
+
+    .dropdown-divider { height: 1px; background: #242424; margin: 2px 0; }
+
+    .add-account-btn {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px;
+      cursor: pointer;
+      transition: background 0.12s;
+      border: none;
+      background: none;
+      width: 100%;
+      text-align: left;
+      color: #888;
+      font-family: inherit;
+      font-size: 12px;
+    }
+    .add-account-btn:hover { background: #252525; color: #ccc; }
+    .add-account-btn .add-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: #252525;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      color: #666;
+      flex-shrink: 0;
+    }
+    .add-account-btn:hover .add-icon { background: #303030; color: #aaa; }
+
+    /* ── Status ── */
+    .section { padding: 12px 14px; border-bottom: 1px solid #1a1a1a; }
+    .section-label {
+      font-size: 10px;
+      font-weight: 600;
+      color: #717171;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      margin-bottom: 6px;
+    }
+    #status-text { color: #ccc; line-height: 1.5; font-size: 12px; }
+
+    /* ── Account notice ── */
+    #needs-auth-notice {
+      display: none;
+      background: #1a1200;
+      border: 1px solid #4a3800;
+      border-radius: 5px;
+      padding: 8px 10px;
+      font-size: 11px;
+      color: #f4a522;
+      margin-top: 8px;
+      line-height: 1.5;
+    }
+
+    /* ── Progress bar ── */
+    #progress-bar {
+      display: none;
+      height: 3px;
+      background: #1a1a1a;
+      border-radius: 2px;
+      margin-top: 8px;
+      overflow: hidden;
+    }
+    #progress-fill {
+      height: 100%;
+      background: #ff0000;
+      border-radius: 2px;
+      width: 0%;
+      transition: width 0.3s ease;
+    }
+
+    /* ── Quota ── */
+    #quota-text { color: #aaa; font-size: 11px; margin-bottom: 5px; }
+    .quota-bar { height: 3px; background: #1a1a1a; border-radius: 2px; overflow: hidden; }
+    .quota-fill { height: 100%; background: #4caf50; border-radius: 2px; transition: width 0.3s; }
+    .quota-fill.quota-warn { background: #f4a522; }
+
+    /* ── Buttons ── */
+    .btn-row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 6px 10px;
+      border-radius: 5px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      border: none;
+      text-decoration: none;
+      transition: opacity 0.15s, background 0.15s;
+      font-family: inherit;
+    }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-primary { background: #ff0000; color: #fff; }
+    .btn-primary:hover:not(:disabled) { background: #cc0000; }
+    .btn-secondary { background: #272727; color: #ccc; }
+    .btn-secondary:hover:not(:disabled) { background: #3d3d3d; }
+    .btn-ghost { background: transparent; color: #717171; }
+    .btn-ghost:hover { color: #ccc; }
+
+    /* ── Monetization ── */
+    .mono-row { display: flex; gap: 6px; flex-wrap: wrap; }
+    #kofi-btn, #gumroad-btn { display: none; }
+    #kofi-btn { background: #ff5f5f; color: #fff; }
+    #gumroad-btn { background: #36a9ae; color: #fff; }
+    #sponsor-slot { display: none; margin-top: 6px; font-size: 11px; color: #717171; }
+    #sponsor-link { color: #aaa; text-decoration: none; }
+    #sponsor-link:hover { color: #fff; }
+
+    /* ── Debug ── */
+    #debug-toggle { font-size: 11px; color: #717171; cursor: pointer; background: none; border: none; padding: 0; font-family: inherit; }
+    #debug-toggle:hover { color: #ccc; }
+    #debug-panel { display: none; margin-top: 8px; }
+    #debug-entries {
+      max-height: 180px;
+      overflow-y: auto;
+      background: #0a0a0a;
+      border: 1px solid #1a1a1a;
+      border-radius: 4px;
+      padding: 6px;
+      font-family: monospace;
+      font-size: 10px;
+    }
+    .log-entry { display: flex; gap: 4px; padding: 1px 0; }
+    .log-time { color: #444; flex-shrink: 0; }
+    .log-level { flex-shrink: 0; font-weight: 700; width: 38px; }
+    .log-source { color: #666; flex-shrink: 0; }
+    .log-msg { color: #aaa; word-break: break-all; }
+    .log-debug .log-level { color: #444; }
+    .log-info .log-level { color: #4caf50; }
+    .log-warn .log-level { color: #f4a522; }
+    .log-error .log-level { color: #ff5252; }
+
+    #saved-msg { display: none; color: #4caf50; font-size: 11px; margin-top: 6px; }
+
+    /* ── Footer ── */
+    .footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 14px;
+      border-top: 1px solid #1a1a1a;
+    }
+    .footer-note { font-size: 10px; color: #444; }
+    .yt-badge { font-size: 10px; color: #444; }
+  </style>
+</head>
+<body>
+
+  <!-- Header with Accounts dropdown -->
+  <div class="header">
+    <span class="logo">SubSearch</span>
+    <span class="tagline">Search your subscriptions</span>
+
+    <button class="accounts-btn" id="accounts-btn" type="button" title="Manage accounts">
+      <div class="acct-avatar" id="header-avatar">?</div>
+      <span class="acct-label" id="header-label">Accounts</span>
+      <span class="chevron">▾</span>
+    </button>
+
+    <!-- Dropdown -->
+    <div class="accounts-dropdown" id="accounts-dropdown">
+      <div class="dropdown-header">Accounts</div>
+      <div id="accounts-list"><!-- filled by JS --></div>
+      <div class="dropdown-divider"></div>
+      <button class="add-account-btn" id="add-account-btn" type="button">
+        <div class="add-icon">+</div>
+        <span>Add account</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Status -->
+  <div class="section">
+    <div class="section-label">Index Status</div>
+    <div id="status-text">Loading…</div>
+    <div id="needs-auth-notice">
+      This account needs to sign in — click <strong>Build Index</strong> to authenticate.
+    </div>
+    <div id="progress-bar"><div id="progress-fill"></div></div>
+    <div class="btn-row">
+      <button class="btn btn-primary" id="index-btn" type="button">▶ Build Index</button>
+      <button class="btn btn-secondary" id="refresh-btn" type="button" style="display:none">↻ Refresh</button>
+      <button class="btn btn-ghost" id="clear-btn" type="button">✕ Clear</button>
+    </div>
+  </div>
+
+  <!-- Quota -->
+  <div class="section">
+    <div class="section-label">API Quota</div>
+    <div id="quota-text">Loading…</div>
+    <div class="quota-bar"><div class="quota-fill" id="quota-fill" style="width:0%"></div></div>
+  </div>
+
+  <!-- Monetization -->
+  <div class="section">
+    <div class="mono-row">
+      <a class="btn" id="kofi-btn" href="#" target="_blank" rel="noopener noreferrer">☕ Support on Ko-fi</a>
+      <a class="btn" id="gumroad-btn" href="#" target="_blank" rel="noopener noreferrer">★ Get Pro</a>
+    </div>
+    <div id="sponsor-slot">Sponsor: <a id="sponsor-link" href="#" target="_blank" rel="noopener noreferrer"></a></div>
+  </div>
+
+  <!-- Debug & Settings -->
+  <div class="section">
+    <div style="display:flex; justify-content:space-between; align-items:center">
+      <button id="debug-toggle" type="button">▶ Debug</button>
+      <button class="btn btn-ghost" id="options-btn" type="button">⚙ Settings</button>
+    </div>
+    <div id="debug-panel">
+      <div id="debug-entries"></div>
+      <div style="margin-top:6px">
+        <button class="btn btn-secondary" id="copy-log-btn" type="button">Copy debug log</button>
+      </div>
+    </div>
+    <div id="saved-msg"></div>
+  </div>
+
+  <!-- Footer -->
+  <div class="footer">
+    <span class="footer-note">Ctrl+Shift+F to search on YouTube</span>
+    <span class="yt-badge">Powered by YouTube</span>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

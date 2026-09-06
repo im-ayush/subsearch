@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SubSearch — Settings</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      max-width: 560px;
+      margin: 40px auto;
+      padding: 0 20px 60px;
+      background: #0f0f0f;
+      color: #fff;
+      font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 14px;
+      line-height: 1.6;
+    }
+
+    h1 { font-size: 22px; font-weight: 700; margin-bottom: 4px; }
+    h1 span { color: #ff0000; }
+    .subtitle { color: #717171; font-size: 13px; margin-bottom: 32px; }
+
+    .card {
+      background: #111;
+      border: 1px solid #272727;
+      border-radius: 10px;
+      padding: 20px;
+      margin-bottom: 16px;
+    }
+    .card h2 { font-size: 13px; font-weight: 600; color: #aaa; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 16px; }
+
+    .field { margin-bottom: 16px; }
+    .field:last-child { margin-bottom: 0; }
+    label { display: block; font-size: 13px; color: #ccc; margin-bottom: 5px; }
+    .field-hint { font-size: 11px; color: #717171; margin-top: 3px; }
+
+    input[type="number"], select {
+      width: 100%;
+      background: #1a1a1a;
+      border: 1px solid #272727;
+      border-radius: 5px;
+      color: #fff;
+      font-size: 13px;
+      padding: 7px 10px;
+    }
+    input[type="number"]:focus, select:focus {
+      outline: 2px solid #ff0000;
+      outline-offset: 1px;
+    }
+
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .toggle-label { font-size: 13px; color: #ccc; }
+
+    input[type="checkbox"] {
+      width: 36px;
+      height: 20px;
+      cursor: pointer;
+      accent-color: #ff0000;
+    }
+
+    .btn-row { display: flex; gap: 8px; margin-top: 20px; }
+    .btn {
+      padding: 8px 16px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      border: none;
+      transition: background 0.15s;
+    }
+    .btn-primary { background: #ff0000; color: #fff; }
+    .btn-primary:hover { background: #cc0000; }
+    .btn-secondary { background: #272727; color: #ccc; }
+    .btn-secondary:hover { background: #3d3d3d; }
+
+    #saved-msg { display: none; color: #4caf50; font-size: 12px; margin-top: 10px; }
+
+    .info-box {
+      background: #0a1628;
+      border: 1px solid #1a3a6a;
+      border-radius: 6px;
+      padding: 12px;
+      font-size: 12px;
+      color: #8ab4f8;
+      margin-top: 16px;
+      line-height: 1.5;
+    }
+    .yt-badge { font-size: 11px; color: #444; text-align: center; margin-top: 24px; }
+  </style>
+</head>
+<body>
+
+  <h1><span>Sub</span>Search Settings</h1>
+  <p class="subtitle">Configure how SubSearch indexes and searches your YouTube subscriptions.</p>
+
+  <!-- Indexing -->
+  <div class="card">
+    <h2>Indexing</h2>
+    <div class="field">
+      <label for="videos-per-channel">Videos per channel</label>
+      <input type="number" id="videos-per-channel" min="5" max="50" step="5" value="15" />
+      <p class="field-hint">How many recent videos to index per channel. Higher = more quota used. Recommended: 15–25.</p>
+    </div>
+    <div class="info-box">
+      ℹ Indexing all channels with the selected videos-per-channel count costs ~3 units per channel. Your daily limit is 10,000 units. Incremental syncs cost ~50–100 units. Video age is controlled by the freshness filter (max 5 years).
+    </div>
+  </div>
+
+  <!-- Search defaults -->
+  <div class="card">
+    <h2>Search Defaults</h2>
+    <div class="field">
+      <label for="freshness-months">Default freshness filter</label>
+      <select id="freshness-months">
+        <option value="1">1 month</option>
+        <option value="6" selected>6 months</option>
+        <option value="12">1 year</option>
+        <option value="18">18 months</option>
+        <option value="0">All time</option>
+      </select>
+      <p class="field-hint">Default filter shown when the overlay opens. Can be changed per-search.</p>
+    </div>
+  </div>
+
+  <!-- Overlay -->
+  <div class="card">
+    <h2>Overlay</h2>
+    <div class="field">
+      <div class="toggle-row">
+        <span class="toggle-label">Show overlay on YouTube search pages</span>
+        <input type="checkbox" id="overlay-enabled" checked />
+      </div>
+      <p class="field-hint">When enabled, the SubSearch overlay appears automatically on youtube.com/results. You can also open it with Ctrl+Shift+F.</p>
+    </div>
+  </div>
+
+  <div class="btn-row">
+    <button class="btn btn-primary" id="save-btn" type="button">Save preferences</button>
+    <button class="btn btn-secondary" id="reset-btn" type="button">Reset to defaults</button>
+  </div>
+  <div id="saved-msg"></div>
+
+  <p class="yt-badge">Powered by YouTube</p>
+
+  <script src="options.js"></script>
+</body>
+</html>

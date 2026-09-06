@@ -1,0 +1,40 @@
+# SubSearch — .gitignore
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Node / Build ─────────────────────────────────────────────────────────────
+# esbuild.config.js outputs these to the repo root (same layout manifest.json
+# expects) — run `npm run build` to regenerate them.
+node_modules/
+dist/
+/background.js
+/content.js
+/popup.js
+/options.js
+
+# ── Environment / Secrets ────────────────────────────────────────────────────
+# .env contains your OAuth Client ID and other config — do NOT commit it.
+# Commit .env.example (a copy with placeholder values) instead.
+.env
+.env.local
+.env.*.local
+
+# ── OAuth credentials (never commit these) ───────────────────────────────────
+credentials.json
+token.json
+*.pem
+*.key
+
+# ── OS / Editor ──────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.vscode/settings.json
+*.swp
+*.swo
+
+# ── TypeScript build artifacts ───────────────────────────────────────────────
+*.js.map
+*.tsbuildinfo
+
+# ── Extension package ────────────────────────────────────────────────────────
+*.zip
+*.crx

@@ -1,0 +1,21 @@
+{
+  "name": "subsearch",
+  "version": "0.1.0",
+  "description": "Search within your own YouTube subscriptions — a Chrome extension (Manifest V3).",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node esbuild.config.js",
+    "build:prod": "node esbuild.config.js --prod",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "dexie": "^3.2.7",
+    "fuse.js": "^7.0.0"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.268",
+    "esbuild": "^0.21.0",
+    "typescript": "^5.4.0"
+  }
+}
