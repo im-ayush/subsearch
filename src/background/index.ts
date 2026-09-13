@@ -48,7 +48,8 @@ async function handleMessage(
       case "START_INDEX": {
         const current = await getIndexState();
         if (current.status !== "indexing") {
-          void runFullIndex();
+          const activeAccountId = await getActiveAccountId();
+          void runFullIndex(activeAccountId ?? undefined);
         }
         const state = await getIndexState();
         sendResponse({ type: "INDEX_STATE", state, activeAccountId: await getActiveAccountId() });
@@ -106,8 +107,12 @@ async function handleMessage(
 
       case "ADD_ACCOUNT":
       case "RE_AUTH": {
-        await addNewAccount();
-        sendResponse({ type: "OK" });
+        const result = await addNewAccount();
+        sendResponse(
+          result.ok
+            ? { type: "ADD_ACCOUNT_RESULT", ok: true, account: result.value }
+            : { type: "ADD_ACCOUNT_RESULT", ok: false, error: result.error }
+        );
         return;
       }
 

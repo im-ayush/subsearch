@@ -62,6 +62,8 @@ let cachedAccounts: Account[] = [];
 let cachedActiveId: string | null = null;
 let cachedLogEntries: LogEntry[] = [];
 let lastStatus: string | null = null;
+/** Suppresses the 3s poll's status-text overwrite so a message the user needs to act on stays put. */
+let holdStatusText = false;
 
 function openDropdown(): void {
   dropdownOpen = true;
@@ -150,6 +152,7 @@ async function handleAccountSwitch(accountId: string): Promise<void> {
   closeDropdown();
   await loadAccounts();
 
+  holdStatusText = response.needsAuth === true;
   if (response.needsAuth) {
     setText("status-text", "Account switched — sign in required.");
     setVisible("needs-auth-notice", true);
@@ -201,7 +204,7 @@ async function refreshStatus(): Promise<void> {
   });
   const state = stateResp.state;
 
-  setText("status-text", formatStatus(state));
+  if (!holdStatusText) setText("status-text", formatStatus(state));
   renderProgressBar(state);
 
   const indexBtn = getEl<HTMLButtonElement>("index-btn");
@@ -292,11 +295,28 @@ async function init(): Promise<void> {
 
   getEl("add-account-btn").addEventListener("click", async () => {
     closeDropdown();
-    await sendMessage({ type: "ADD_ACCOUNT" });
-    setText("status-text", 'Ready to add an account — click "Build Index" and choose a Google account.');
+    const priorIds = new Set(cachedAccounts.map((a) => a.id));
+    const response = await sendMessage<Extract<BackgroundResponse, { type: "ADD_ACCOUNT_RESULT" }>>({
+      type: "ADD_ACCOUNT",
+    });
+    await loadAccounts();
+    await refreshStatus();
+
+    holdStatusText = true;
+    if (!response.ok || !response.account) {
+      setText("status-text", response.error ?? "Sign-in was cancelled or failed.");
+    } else if (priorIds.has(response.account.id)) {
+      setText(
+        "status-text",
+        `Google signed you back into ${response.account.email}, which is already added. Switch accounts at google.com in this browser, then try again.`
+      );
+    } else {
+      setText("status-text", `Added ${response.account.email} — click "Build Index" to index it.`);
+    }
   });
 
   getEl("index-btn").addEventListener("click", async () => {
+    holdStatusText = false;
     await sendMessage({ type: "START_INDEX" });
     lastStatus = "indexing";
     await refreshStatus();

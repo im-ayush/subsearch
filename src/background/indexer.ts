@@ -10,6 +10,7 @@ import {
   QUOTA_WARN_THRESHOLD,
 } from "../shared/constants";
 import {
+  getActiveAccountId,
   getActiveDb,
   getIndexState,
   getQuotaUsedToday,
@@ -123,9 +124,23 @@ async function runSinglePhase(
   await broadcastIndexComplete();
 }
 
-export async function runFullIndex(): Promise<void> {
+/**
+ * `targetAccountId`, if given, is tried silently first so rebuilding a known
+ * account's index doesn't prompt when a valid grant already exists for it.
+ * The fallback interactive call is deliberately never pinned: pinning an
+ * interactive request makes Chrome hard-fail if the user authenticates as a
+ * different account than requested — exactly what happens when they're
+ * trying to add a second account. Whichever account comes back is accepted;
+ * `fetchAccountInfo` below is what actually identifies it.
+ */
+export async function runFullIndex(targetAccountId?: string): Promise<void> {
   try {
-    const tokenResult = await getAuthToken(true);
+    let tokenResult = targetAccountId
+      ? await getAuthToken(false, targetAccountId)
+      : ({ ok: false, error: "no target account", retryable: false } as const);
+    if (!tokenResult.ok) {
+      tokenResult = await getAuthToken(true);
+    }
     if (!tokenResult.ok) {
       logger.error(SOURCE, "runFullIndex: auth failed", { error: tokenResult.error });
       await updateIndexState({ status: "error" });
@@ -144,7 +159,7 @@ export async function runFullIndex(): Promise<void> {
     await setActiveAccountId(accountInfo.id);
     await updateIndexState({ status: "indexing" });
 
-    const onTokenExpired = makeTokenRefresher();
+    const onTokenExpired = makeTokenRefresher(accountInfo.id);
 
     const subsResult = await fetchSubscriptions(token, onTokenExpired);
     if (!subsResult.ok) {
@@ -189,14 +204,17 @@ export async function runIncrementalRefresh(videosPerChannel = DEFAULT_VIDEOS_PE
     return;
   }
 
+  const activeAccountId = await getActiveAccountId();
+  if (!activeAccountId) return;
+
   try {
-    const tokenResult = await getAuthToken(false);
+    const tokenResult = await getAuthToken(false, activeAccountId);
     if (!tokenResult.ok) {
       logger.warn(SOURCE, "runIncrementalRefresh: auth failed", { error: tokenResult.error });
       return;
     }
     const token = tokenResult.value.token;
-    const onTokenExpired = makeTokenRefresher();
+    const onTokenExpired = makeTokenRefresher(activeAccountId);
 
     const db = await getActiveDb();
     if (!db) return;

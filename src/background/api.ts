@@ -244,9 +244,13 @@ export async function fetchVideosForChannel(
   return { ok: true, value: { videos, nextPageToken: pageToken } };
 }
 
-export function makeTokenRefresher(): (staleToken: string) => Promise<string | null> {
+/**
+ * Pinned to `accountId` so a mid-index token refresh can't come back holding a
+ * different account's token and write that account's videos into this one's DB.
+ */
+export function makeTokenRefresher(accountId: string): (staleToken: string) => Promise<string | null> {
   return async (staleToken: string) => {
-    const result = await refreshToken(staleToken);
+    const result = await refreshToken(staleToken, accountId);
     return result.ok ? result.value.token : null;
   };
 }

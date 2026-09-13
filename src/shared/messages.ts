@@ -22,6 +22,7 @@ export type BackgroundResponse =
   | { type: "DEBUG_LOG"; entries: LogEntry[] }
   | { type: "OK" }
   | { type: "ACCOUNTS"; accounts: Account[]; activeAccountId: string | null }
+  | { type: "ADD_ACCOUNT_RESULT"; ok: boolean; account?: Account; error?: string }
   | {
       type: "SWITCH_ACCOUNT_RESULT";
       ok: boolean;
