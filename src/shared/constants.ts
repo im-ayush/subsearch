@@ -31,6 +31,7 @@ export const STORAGE_KEY_PREFERENCES = "subsearch_prefs";
 export const STORAGE_KEY_ACCOUNTS = "subsearch_accounts";
 export const STORAGE_KEY_ACTIVE_ACCOUNT = "subsearch_active_account";
 export const STORAGE_KEY_FRESHNESS = "subsearch_freshness_months";
+export const STORAGE_KEY_FAB_INTRO_SEEN = "subsearch_fab_intro_seen";
 
 export const LOG_KEEP_INFO = 500;
 export const LOG_KEEP_WARN = 200;
