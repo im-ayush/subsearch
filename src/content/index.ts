@@ -1,6 +1,6 @@
 import { logger } from "../shared/logger";
 import { CSS_PREFIX, STORAGE_KEY_FAB_INTRO_SEEN } from "../shared/constants";
-import { getUserPreferences } from "../shared/preferences";
+import { getUserPreferences, setUserPreferences } from "../shared/preferences";
 import { invalidateSearchIndex, searchVideos } from "../search/engine";
 import { SearchOverlay } from "./overlay";
 import { YouTubeRouter } from "./router";
@@ -208,11 +208,12 @@ async function openOverlay(): Promise<void> {
     return;
   }
   if (!overlay) {
-    overlay = new SearchOverlay({ onSearch: handleSearch, onClose: closeOverlay });
+    overlay = new SearchOverlay({ onSearch: handleSearch, onClose: closeOverlay, onAutoOpenChange: handleAutoOpenChange });
   }
   try {
     hideFab();
-    await overlay.mount();
+    const prefs = await getUserPreferences();
+    await overlay.mount(prefs.overlayEnabled);
     overlay.showLoading();
     await loadVideoIndex();
     if (indexState) overlay.updateStatus(indexState, allVideos.length);
@@ -229,11 +230,36 @@ function closeOverlay(): void {
   showFab();
 }
 
+async function handleAutoOpenChange(enabled: boolean): Promise<void> {
+  try {
+    await setUserPreferences({ overlayEnabled: enabled });
+  } catch (err) {
+    logger.warn(SOURCE, "failed to save auto-open preference", { err: String(err) });
+    overlay?.showNotice("Couldn't save that setting — try again.");
+    return;
+  }
+  overlay?.showNotice(
+    enabled ? "Auto-open is on." : `Auto-open is off — use the ⌕ button or ${shortcutLabel()} whenever you want it.`
+  );
+}
+
+/** A modal that can only say "not indexed yet" is pure interruption — never auto-open before there's data. */
+async function hasIndex(): Promise<boolean> {
+  try {
+    const response = await sendToBackground<Extract<BackgroundResponse, { type: "INDEX_STATE" }>>({
+      type: "GET_INDEX_STATE",
+    });
+    return response.state.lastFullIndexAt !== null;
+  } catch {
+    return false;
+  }
+}
+
 const router = new YouTubeRouter((isSearchPage) => {
   if (isSearchPage) {
     void (async () => {
       const prefs = await getUserPreferences();
-      if (prefs.overlayEnabled) await openOverlay();
+      if (prefs.overlayEnabled && (await hasIndex())) await openOverlay();
       else showFab();
     })();
   } else {

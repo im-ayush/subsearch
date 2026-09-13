@@ -217,6 +217,26 @@
     }
     #status-text { color: #ccc; line-height: 1.5; font-size: 12px; }
 
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 10px;
+      font-size: 12px;
+      color: #ccc;
+      cursor: pointer;
+      user-select: none;
+    }
+    .toggle-row input[type="checkbox"] {
+      width: 16px;
+      height: 16px;
+      margin: 0;
+      accent-color: #ff0000;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+
     /* ── Account notice ── */
     #needs-auth-notice {
       display: none;
@@ -382,6 +402,10 @@
 
   <!-- Debug & Settings -->
   <div class="section">
+    <label class="toggle-row">
+      <span>Open automatically when I search YouTube</span>
+      <input type="checkbox" id="auto-open-toggle" />
+    </label>
     <div style="display:flex; justify-content:space-between; align-items:center">
       <button id="debug-toggle" type="button">▶ Debug</button>
       <button class="btn btn-ghost" id="options-btn" type="button">⚙ Settings</button>

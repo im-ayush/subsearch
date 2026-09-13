@@ -1,4 +1,5 @@
 import { MONETIZATION } from "../monetization/config";
+import { getUserPreferences, setUserPreferences } from "../shared/preferences";
 import type { BackgroundMessage, BackgroundResponse } from "../shared/messages";
 import type { Account, IndexState, LogEntry } from "../shared/types";
 
@@ -334,6 +335,12 @@ async function init(): Promise<void> {
   });
 
   getEl("options-btn").addEventListener("click", () => chrome.runtime.openOptionsPage());
+
+  const autoOpenToggle = getEl<HTMLInputElement>("auto-open-toggle");
+  autoOpenToggle.checked = (await getUserPreferences()).overlayEnabled;
+  autoOpenToggle.addEventListener("change", () => {
+    void setUserPreferences({ overlayEnabled: autoOpenToggle.checked });
+  });
 
   const debugToggle = getEl<HTMLButtonElement>("debug-toggle");
   let debugOpen = false;

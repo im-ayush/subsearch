@@ -149,6 +149,33 @@
   background: #3d3d3d;
   border-radius: 3px;
 }
+.ss-footer {
+  padding: 8px 16px;
+  border-top: 1px solid #1e1e1e;
+  background: #0a0a0a;
+  flex-shrink: 0;
+  display: flex;
+  justify-content: flex-end;
+}
+.ss-auto-open {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: #717171;
+  cursor: pointer;
+  user-select: none;
+  transition: color 0.15s;
+}
+.ss-auto-open:hover {
+  color: #aaa;
+}
+.ss-auto-open input {
+  width: 14px;
+  height: 14px;
+  accent-color: #ff0000;
+  cursor: pointer;
+}
 .ss-empty {
   padding: 32px 16px;
   text-align: center;

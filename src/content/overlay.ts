@@ -60,6 +60,12 @@ const FRESHNESS_OPTIONS = [
   { label: "All time", months: 0 },
 ];
 
+interface OverlayCallbacks {
+  onSearch: (query: string, freshnessMonths: number) => void;
+  onClose: () => void;
+  onAutoOpenChange: (enabled: boolean) => void;
+}
+
 export class SearchOverlay {
   root: HTMLElement | null = null;
   input: HTMLInputElement | null = null;
@@ -67,15 +73,17 @@ export class SearchOverlay {
   statusEl: HTMLElement | null = null;
   filterBtns: HTMLButtonElement[] = [];
   activeFreshnessMonths = DEFAULT_PREFERENCES.freshnessMonths;
+  private autoOpen = DEFAULT_PREFERENCES.overlayEnabled;
   private debounceTimer: number | null = null;
   private styleEl: HTMLElement | null = null;
-  private callbacks: { onSearch: (query: string, freshnessMonths: number) => void; onClose: () => void };
+  private callbacks: OverlayCallbacks;
 
-  constructor(callbacks: { onSearch: (query: string, freshnessMonths: number) => void; onClose: () => void }) {
+  constructor(callbacks: OverlayCallbacks) {
     this.callbacks = callbacks;
   }
 
-  async mount(): Promise<void> {
+  async mount(autoOpen: boolean): Promise<void> {
+    this.autoOpen = autoOpen;
     this.activeFreshnessMonths = await loadFreshnessPreference();
     this.injectStyles();
     this.buildDOM();
@@ -113,8 +121,35 @@ export class SearchOverlay {
   }
 
   private buildDOM(): void {
-    const [rootCls, panelCls, headerCls, titleCls, closeCls, inputRowCls, inputCls, filterBarCls, pillCls, statusCls, resultsCls] =
-      prefixed("overlay", "panel", "header", "logo", "close-btn", "input-row", "input", "filter-bar", "filter-btn", "status", "results");
+    const [
+      rootCls,
+      panelCls,
+      headerCls,
+      titleCls,
+      closeCls,
+      inputRowCls,
+      inputCls,
+      filterBarCls,
+      pillCls,
+      statusCls,
+      resultsCls,
+      footerCls,
+      autoOpenCls,
+    ] = prefixed(
+      "overlay",
+      "panel",
+      "header",
+      "logo",
+      "close-btn",
+      "input-row",
+      "input",
+      "filter-bar",
+      "filter-btn",
+      "status",
+      "results",
+      "footer",
+      "auto-open"
+    );
 
     const root = el("div", [rootCls]);
     const panel = el("div", [panelCls], { role: "dialog", "aria-modal": "true", "aria-label": "Search your subscriptions" });
@@ -147,7 +182,17 @@ export class SearchOverlay {
     const status = el("div", [statusCls]);
     const results = el("ul", [resultsCls]);
 
-    panel.append(header, status, results);
+    const footer = el("div", [footerCls]);
+    const autoOpenLabel = el("label", [autoOpenCls]);
+    const autoOpenToggle = el("input", [], { type: "checkbox" });
+    autoOpenToggle.checked = this.autoOpen;
+    autoOpenToggle.addEventListener("change", () => this.callbacks.onAutoOpenChange(autoOpenToggle.checked));
+    const autoOpenText = el("span");
+    autoOpenText.textContent = "Open automatically when I search YouTube";
+    autoOpenLabel.append(autoOpenToggle, autoOpenText);
+    footer.appendChild(autoOpenLabel);
+
+    panel.append(header, status, results, footer);
     root.appendChild(panel);
 
     this.root = root;
@@ -221,6 +266,11 @@ export class SearchOverlay {
   showNotIndexed(): void {
     if (!this.statusEl) return;
     this.statusEl.textContent = "Not indexed yet — open the extension popup to build your index.";
+  }
+
+  showNotice(text: string): void {
+    if (!this.statusEl) return;
+    this.statusEl.textContent = text;
   }
 
   renderResults(results: SearchResult[]): void {
