@@ -74,6 +74,7 @@ export class SearchOverlay {
   filterBtns: HTMLButtonElement[] = [];
   activeFreshnessMonths = DEFAULT_PREFERENCES.freshnessMonths;
   private autoOpen = DEFAULT_PREFERENCES.overlayEnabled;
+  private pinnedChannels = new Set<string>();
   private debounceTimer: number | null = null;
   private styleEl: HTMLElement | null = null;
   private callbacks: OverlayCallbacks;
@@ -236,14 +237,21 @@ export class SearchOverlay {
     this.callbacks.onSearch(this.input?.value.trim() ?? "", months);
   }
 
+  setPinnedChannels(channelIds: Iterable<string>): void {
+    this.pinnedChannels = new Set(channelIds);
+  }
+
   updateStatus(state: IndexState, videoCount: number): void {
     if (!this.statusEl) return;
     if (state.status === "idle" && !state.lastFullIndexAt) {
       this.showNotIndexed();
     } else if (state.status === "indexing") {
       this.showIndexing(state);
+    } else if (state.deepStatus === "indexing") {
+      this.statusEl.textContent = `Deep-indexing pinned channels… ${state.deepProcessedChannels}/${state.deepTotalChannels}`;
     } else {
-      this.statusEl.textContent = `${videoCount.toLocaleString()} videos indexed`;
+      const pinned = this.pinnedChannels.size > 0 ? ` · ${this.pinnedChannels.size} pinned` : "";
+      this.statusEl.textContent = `${videoCount.toLocaleString()} videos indexed${pinned}`;
     }
   }
 
@@ -287,7 +295,7 @@ export class SearchOverlay {
   }
 
   private buildResultItem(result: SearchResult): HTMLAnchorElement {
-    const [itemCls, thumbWrapCls, thumbCls, infoCls, metaCls, titleCls, channelCls, dateCls, badgeCls] = prefixed(
+    const [itemCls, thumbWrapCls, thumbCls, infoCls, metaCls, titleCls, channelCls, dateCls, badgeCls, pinCls] = prefixed(
       "result-item",
       "thumb-wrap",
       "thumb",
@@ -296,7 +304,8 @@ export class SearchOverlay {
       "result-title",
       "result-channel",
       "result-date",
-      "result-badge"
+      "result-badge",
+      "result-pin"
     );
 
     const item = el("a", [itemCls], {
@@ -320,6 +329,11 @@ export class SearchOverlay {
     const badge = el("span", [badgeCls]);
     badge.textContent = result.matchReason;
     meta.append(channel, date, badge);
+    if (this.pinnedChannels.has(result.video.channelId)) {
+      const pin = el("span", [pinCls]);
+      pin.textContent = "Pinned";
+      meta.appendChild(pin);
+    }
     info.append(title, meta);
 
     item.append(thumbWrap, info);

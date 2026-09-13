@@ -36,6 +36,7 @@ function isRawSubscriptionItem(item: unknown): item is RawSubscriptionItem {
 interface RawChannelItem {
   id: string;
   contentDetails: { relatedPlaylists: { uploads: string } };
+  statistics?: { videoCount?: string };
 }
 function isRawChannelItem(item: unknown): item is RawChannelItem {
   if (!isRecord(item) || typeof item.id !== "string" || !isRecord(item.contentDetails)) return false;
@@ -169,7 +170,8 @@ export async function fetchUploadsPlaylistIds(
   for (let i = 0; i < channels.length; i += API_PAGE_SIZE) {
     const batch = channels.slice(i, i + API_PAGE_SIZE);
     const url = new URL(`${YT_BASE}/channels`);
-    url.searchParams.set("part", "contentDetails");
+    // Extra parts on channels.list don't cost extra quota; statistics gives videoCount for cost estimates.
+    url.searchParams.set("part", "contentDetails,statistics");
     url.searchParams.set("id", batch.map((c) => c.id).join(","));
 
     const result = await apiFetch<{ items: unknown[] }>(url.toString(), { token, onTokenExpired });
@@ -180,13 +182,23 @@ export async function fetchUploadsPlaylistIds(
     for (const item of result.value.items) {
       if (!isRawChannelItem(item)) continue;
       const channel = byId.get(item.id);
-      if (channel) channel.uploadsPlaylistId = item.contentDetails.relatedPlaylists.uploads;
+      if (!channel) continue;
+      channel.uploadsPlaylistId = item.contentDetails.relatedPlaylists.uploads;
+      const count = Number(item.statistics?.videoCount);
+      if (Number.isFinite(count)) channel.videoCount = count;
     }
   }
 
   return { ok: true, value: channels };
 }
 
+/**
+ * `publishedAfter` is a stop boundary, not just a filter: the uploads playlist
+ * is newest-first, so the first item at or before it ends pagination. Without
+ * that, an incremental sweep of a 1,000-video channel would page through all
+ * 20 pages (20 units) to find two new uploads. The same boundary gives deep
+ * mode its time window ("everything since N years ago").
+ */
 export async function fetchVideosForChannel(
   token: string,
   channel: Channel,
@@ -196,6 +208,7 @@ export async function fetchVideosForChannel(
   const videos: Video[] = [];
   let pageToken = opts.afterPageToken;
   let newestPublishedAt = channel.lastVideoAt;
+  let reachedBoundary = false;
 
   do {
     const url = new URL(`${YT_BASE}/playlistItems`);
@@ -221,7 +234,10 @@ export async function fetchVideosForChannel(
     for (const item of result.value.items) {
       if (!isRawPlaylistItem(item)) continue;
       const snippet = item.snippet;
-      if (opts.publishedAfter && snippet.publishedAt <= opts.publishedAfter) continue;
+      if (opts.publishedAfter && snippet.publishedAt <= opts.publishedAfter) {
+        reachedBoundary = true;
+        break;
+      }
       videos.push({
         id: snippet.resourceId.videoId,
         title: snippet.title,
@@ -238,7 +254,7 @@ export async function fetchVideosForChannel(
     }
 
     pageToken = result.value.nextPageToken;
-  } while (pageToken && videos.length < opts.maxVideos);
+  } while (pageToken && !reachedBoundary && videos.length < opts.maxVideos);
 
   channel.lastVideoAt = newestPublishedAt;
   return { ok: true, value: { videos, nextPageToken: pageToken } };

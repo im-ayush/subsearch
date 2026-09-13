@@ -92,6 +92,57 @@
       line-height: 1.5;
     }
     .yt-badge { font-size: 11px; color: #444; text-align: center; margin-top: 24px; }
+
+    /* ── Pinned channels ── */
+    .pin-account { font-size: 12px; color: #717171; margin-bottom: 10px; }
+    .pin-account b { color: #ccc; font-weight: 500; }
+    input[type="search"] {
+      width: 100%;
+      background: #1a1a1a;
+      border: 1px solid #272727;
+      border-radius: 5px;
+      color: #fff;
+      font-size: 13px;
+      padding: 7px 10px;
+      margin-bottom: 8px;
+    }
+    input[type="search"]:focus { outline: 2px solid #ff0000; outline-offset: 1px; }
+    .pin-count { font-size: 12px; color: #717171; margin-bottom: 6px; }
+    .pin-count.at-limit { color: #f4a522; }
+    .pin-list {
+      max-height: 320px;
+      overflow-y: auto;
+      border: 1px solid #272727;
+      border-radius: 6px;
+      background: #0d0d0d;
+      scrollbar-width: thin;
+      scrollbar-color: #3d3d3d transparent;
+    }
+    .pin-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 12px;
+      margin: 0;
+      font-size: 13px;
+      color: #ccc;
+      cursor: pointer;
+      border-bottom: 1px solid #1a1a1a;
+    }
+    .pin-row:last-child { border-bottom: none; }
+    .pin-row:hover { background: #161616; }
+    .pin-row.pinned { color: #fff; }
+    .pin-row input[type="checkbox"] { width: 16px; height: 16px; flex-shrink: 0; }
+    .pin-row input[type="checkbox"]:disabled { cursor: not-allowed; opacity: 0.35; }
+    .pin-row input[type="checkbox"]:disabled + .pin-title { opacity: 0.5; }
+    .pin-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .pin-meta { font-size: 11px; color: #555; white-space: nowrap; }
+    .pin-empty { padding: 24px 12px; text-align: center; color: #717171; font-size: 12px; }
+    .pin-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px; }
+    .pin-cost { font-size: 12px; color: #8ab4f8; flex: 1; }
+    .pin-status { font-size: 12px; color: #aaa; margin-top: 10px; min-height: 18px; }
+    .pin-status.ok { color: #4caf50; }
+    .pin-status.err { color: #f4a522; }
   </style>
 </head>
 <body>
@@ -104,12 +155,29 @@
     <h2>Indexing</h2>
     <div class="field">
       <label for="videos-per-channel">Videos per channel</label>
-      <input type="number" id="videos-per-channel" min="5" max="50" step="5" value="15" />
-      <p class="field-hint">How many recent videos to index per channel. Higher = more quota used. Recommended: 15–25.</p>
+      <input type="number" id="videos-per-channel" min="5" max="200" step="5" value="15" />
+      <p class="field-hint">How many recent videos to index per channel (5–200). Recommended: 15–25 for many subscriptions; go higher if you follow only a handful of channels and want their back catalogue.</p>
     </div>
     <div class="info-box">
-      ℹ Indexing all channels with the selected videos-per-channel count costs ~3 units per channel. Your daily limit is 10,000 units. Incremental syncs cost ~50–100 units. Video age is controlled by the freshness filter (max 5 years).
+      ℹ Each channel costs 1 quota unit per 50 videos fetched — so 15 videos ≈ 1 unit and 200 videos ≈ 4 units per channel. Your daily limit is 10,000 units. Incremental syncs cost ~50–100 units. Video age is controlled by the freshness filter (max 5 years).
     </div>
+  </div>
+
+  <!-- Pinned channels -->
+  <div class="card">
+    <h2>Pinned Channels</h2>
+    <p class="field-hint" style="margin-bottom:12px">
+      Every channel gets its latest videos. Pinned channels also get their full history (up to 5 years), so you can find that video from three years ago. Pick up to 10.
+    </p>
+    <div class="pin-account" id="pin-account"></div>
+    <input type="search" id="pin-search" placeholder="Filter channels…" autocomplete="off" />
+    <div class="pin-count"><span id="pin-count">0</span> / <span id="pin-max">10</span> pinned</div>
+    <div class="pin-list" id="pin-list"><div class="pin-empty">Loading…</div></div>
+    <div class="pin-footer">
+      <div class="pin-cost" id="pin-cost"></div>
+      <button class="btn btn-primary" id="pin-save-btn" type="button" disabled>Save pins</button>
+    </div>
+    <div class="pin-status" id="pin-status"></div>
   </div>
 
   <!-- Search defaults -->

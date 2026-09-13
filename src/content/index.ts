@@ -37,6 +37,7 @@ async function loadVideoIndex(): Promise<void> {
   const response = await sendToBackground<Extract<BackgroundResponse, { type: "VIDEOS" }>>({ type: "GET_VIDEOS" });
   allVideos = response.videos;
   indexState = response.state;
+  overlay?.setPinnedChannels(response.pinnedChannelIds);
   invalidateSearchIndex();
 }
 
@@ -54,8 +55,9 @@ function startStatePolling(): void {
         invalidateSearchIndex();
       }
       indexState = response.state;
+      overlay?.setPinnedChannels(response.pinnedChannelIds);
       if (overlay?.isOpen()) overlay.updateStatus(indexState, allVideos.length);
-      if (indexState.status !== "indexing") stopStatePolling();
+      if (indexState.status !== "indexing" && indexState.deepStatus !== "indexing") stopStatePolling();
     } catch (err) {
       logger.warn(SOURCE, "state polling failed, likely stale extension context", { err: String(err) });
       stopStatePolling();
@@ -217,7 +219,7 @@ async function openOverlay(): Promise<void> {
     overlay.showLoading();
     await loadVideoIndex();
     if (indexState) overlay.updateStatus(indexState, allVideos.length);
-    if (indexState?.status === "indexing") startStatePolling();
+    if (indexState?.status === "indexing" || indexState?.deepStatus === "indexing") startStatePolling();
     if (query) overlay.setQuery(query);
   } catch (err) {
     logger.warn(SOURCE, "openOverlay failed, likely stale extension context", { err: String(err) });

@@ -1,5 +1,5 @@
 import Dexie from "dexie";
-import { STORAGE_KEY_ACCOUNTS, STORAGE_KEY_ACTIVE_ACCOUNT } from "../shared/constants";
+import { STORAGE_KEY_ACCOUNTS, STORAGE_KEY_ACTIVE_ACCOUNT, STORAGE_KEY_PINNED_PREFIX } from "../shared/constants";
 import { LOG_LIMITS, initLogger } from "../shared/logger";
 import type { Account, IndexState, LogEntry, LogLevel } from "../shared/types";
 
@@ -82,6 +82,24 @@ export async function getAccountList(): Promise<Account[]> {
   return Object.values(registry);
 }
 
+// Pins live in chrome.storage.local rather than on the Channel rows so that a
+// rebuild or "Clear index" never wipes what the user chose to pin.
+export async function getPinnedChannelIds(accountId: string): Promise<string[]> {
+  const key = STORAGE_KEY_PINNED_PREFIX + accountId;
+  return new Promise((resolve) => {
+    chrome.storage.local.get(key, (result) => {
+      const stored = result[key];
+      resolve(Array.isArray(stored) ? (stored as string[]) : []);
+    });
+  });
+}
+
+export async function setPinnedChannelIds(accountId: string, channelIds: string[]): Promise<void> {
+  return new Promise((resolve) => {
+    chrome.storage.local.set({ [STORAGE_KEY_PINNED_PREFIX + accountId]: channelIds }, () => resolve());
+  });
+}
+
 export async function persistLogEntry(entry: LogEntry): Promise<void> {
   await logsDb.table("logs").add(entry);
 }
@@ -113,11 +131,17 @@ export const DEFAULT_INDEX_STATE: IndexState = {
   quotaUsedToday: 0,
   quotaResetDate: todayString(),
   lastProcessedChannelId: null,
+  deepStatus: "idle",
+  deepProcessedChannels: 0,
+  deepTotalChannels: 0,
+  lastDeepIndexAt: null,
 };
 
 async function readIndexState(db: Dexie): Promise<IndexState> {
-  const state = (await db.table("indexState").get(1)) as IndexState | undefined;
-  if (!state) return { ...DEFAULT_INDEX_STATE };
+  const stored = (await db.table("indexState").get(1)) as Partial<IndexState> | undefined;
+  if (!stored) return { ...DEFAULT_INDEX_STATE };
+  // Spread over defaults so states written before a field existed still read as complete.
+  const state: IndexState = { ...DEFAULT_INDEX_STATE, ...stored };
   if (state.quotaResetDate !== todayString()) {
     const reset = { ...state, quotaUsedToday: 0, quotaResetDate: todayString() };
     await db.table("indexState").put(reset);

@@ -26,6 +26,16 @@ export interface Channel {
   title: string;
   uploadsPlaylistId: string;
   lastVideoAt: string;
+  /** Total uploads on YouTube, captured at index time. Used to estimate deep-index cost. */
+  videoCount?: number;
+}
+
+/** What the Options page needs to render the pin list — no playlist internals. */
+export interface ChannelSummary {
+  id: string;
+  title: string;
+  pinned: boolean;
+  videoCount?: number;
 }
 
 export interface Video {
@@ -52,6 +62,11 @@ export interface IndexState {
   quotaUsedToday: number;
   quotaResetDate: string;
   lastProcessedChannelId: string | null;
+  /** Deep-index pass over pinned channels — tracked separately so it never disturbs the baseline counters above. */
+  deepStatus: IndexStatus;
+  deepProcessedChannels: number;
+  deepTotalChannels: number;
+  lastDeepIndexAt: string | null;
 }
 
 export type LogLevel = "debug" | "info" | "warn" | "error";

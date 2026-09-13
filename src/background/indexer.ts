@@ -1,11 +1,15 @@
+import type Dexie from "dexie";
 import { logger } from "../shared/logger";
 import { getUserPreferences } from "../shared/preferences";
 import {
   CONCURRENT_FETCHES,
   DAILY_QUOTA_LIMIT,
+  DEEP_MAX_VIDEOS_PER_CHANNEL,
   DEFAULT_MAX_AGE_DAYS,
   DEFAULT_VIDEOS_PER_CHANNEL,
   FRESHNESS_RECENT_DAYS,
+  MAX_VIDEOS_PER_CHANNEL,
+  MIN_VIDEOS_PER_CHANNEL,
   QUOTA_ABORT_THRESHOLD,
   QUOTA_WARN_THRESHOLD,
 } from "../shared/constants";
@@ -13,6 +17,7 @@ import {
   getActiveAccountId,
   getActiveDb,
   getIndexState,
+  getPinnedChannelIds,
   getQuotaUsedToday,
   setActiveAccountId,
   updateIndexState,
@@ -20,7 +25,7 @@ import {
 } from "../storage/db";
 import { fetchAccountInfo, getAuthToken, getTokenForAccount } from "./auth";
 import { fetchSubscriptions, fetchUploadsPlaylistIds, fetchVideosForChannel, makeTokenRefresher } from "./api";
-import type { Channel, IndexState } from "../shared/types";
+import type { Channel, IndexState, Video } from "../shared/types";
 import type { TabMessage } from "../shared/messages";
 
 const SOURCE = "indexer";
@@ -70,11 +75,23 @@ async function withConcurrency<T>(
   await Promise.all(workers);
 }
 
+function deepWindowStart(): string {
+  return new Date(Date.now() - DEFAULT_MAX_AGE_DAYS * DAY_MS).toISOString();
+}
+
+/** Pinned channels get the full time window; everything else gets the baseline count. */
+function fetchOptionsFor(channelId: string, pinned: Set<string>, videosPerChannel: number) {
+  return pinned.has(channelId)
+    ? { maxVideos: DEEP_MAX_VIDEOS_PER_CHANNEL, publishedAfter: deepWindowStart() }
+    : { maxVideos: videosPerChannel };
+}
+
 async function runSinglePhase(
   channels: Channel[],
   token: string,
   onTokenExpired: (token: string) => Promise<string | null>,
   videosPerChannel: number,
+  pinned: Set<string>,
   state: IndexState
 ): Promise<void> {
   const db = await getActiveDb();
@@ -96,7 +113,12 @@ async function runSinglePhase(
       return;
     }
 
-    const result = await fetchVideosForChannel(token, channel, { maxVideos: videosPerChannel }, onTokenExpired);
+    const result = await fetchVideosForChannel(
+      token,
+      channel,
+      fetchOptionsFor(channel.id, pinned, videosPerChannel),
+      onTokenExpired
+    );
     if (!result.ok) {
       logger.warn(SOURCE, "failed to fetch videos for channel", { channelId: channel.id, error: result.error });
       failedChannelIds.push(channel.id);
@@ -133,21 +155,25 @@ async function runSinglePhase(
  * trying to add a second account. Whichever account comes back is accepted;
  * `fetchAccountInfo` below is what actually identifies it.
  */
+async function acquireToken(accountId: string | undefined, context: string): Promise<string | null> {
+  if (accountId) {
+    const silent = await getTokenForAccount(accountId, context);
+    if (silent.ok) return silent.value.token;
+  }
+  const interactive = await getAuthToken(true);
+  if (!interactive.ok) {
+    logger.error(SOURCE, `${context}: auth failed`, { error: interactive.error });
+    return null;
+  }
+  return interactive.value.token;
+}
+
 export async function runFullIndex(targetAccountId?: string): Promise<void> {
   try {
-    let token: string | null = null;
-    if (targetAccountId) {
-      const pinned = await getTokenForAccount(targetAccountId, "runFullIndex");
-      if (pinned.ok) token = pinned.value.token;
-    }
+    const token = await acquireToken(targetAccountId, "runFullIndex");
     if (!token) {
-      const interactive = await getAuthToken(true);
-      if (!interactive.ok) {
-        logger.error(SOURCE, "runFullIndex: auth failed", { error: interactive.error });
-        await updateIndexState({ status: "error" });
-        return;
-      }
-      token = interactive.value.token;
+      await updateIndexState({ status: "error" });
+      return;
     }
 
     const accountInfo = await fetchAccountInfo(token);
@@ -184,17 +210,117 @@ export async function runFullIndex(targetAccountId?: string): Promise<void> {
     await updateIndexState({ totalChannels: channels.length });
 
     const prefs = await getUserPreferences();
-    const videosPerChannel = Math.max(5, Math.min(50, prefs.videosPerChannel || DEFAULT_VIDEOS_PER_CHANNEL));
+    const videosPerChannel = Math.max(
+      MIN_VIDEOS_PER_CHANNEL,
+      Math.min(MAX_VIDEOS_PER_CHANNEL, prefs.videosPerChannel || DEFAULT_VIDEOS_PER_CHANNEL)
+    );
 
     const state = await getIndexState();
     if (state.status === "completed" && state.lastProcessedChannelId === null) {
       return;
     }
 
-    await runSinglePhase(channels, token, onTokenExpired, videosPerChannel, state);
+    const pinned = new Set(await getPinnedChannelIds(accountInfo.id));
+    await runSinglePhase(channels, token, onTokenExpired, videosPerChannel, pinned, state);
   } catch (err) {
     logger.error(SOURCE, "runFullIndex threw", { err: String(err) });
     await updateIndexState({ status: "error" });
+  }
+}
+
+async function trimChannelToBaseline(db: Dexie, channelId: string, keep: number): Promise<void> {
+  const videos = (await db.table("videos").where("channelId").equals(channelId).toArray()) as Video[];
+  if (videos.length <= keep) return;
+  videos.sort((a, b) => (a.publishedAt < b.publishedAt ? 1 : -1));
+  await db.table("videos").bulkDelete(videos.slice(keep).map((v) => v.id));
+}
+
+/**
+ * Backfills full history for newly pinned channels and trims newly unpinned
+ * ones back to the baseline count. Progress goes to the `deep*` state fields
+ * so the baseline counters and lastFullIndexAt are never disturbed.
+ */
+export async function applyPinChanges(added: string[], removed: string[]): Promise<void> {
+  const accountId = await getActiveAccountId();
+  const db = await getActiveDb();
+  if (!accountId || !db) return;
+
+  const prefs = await getUserPreferences();
+  const videosPerChannel = Math.max(
+    MIN_VIDEOS_PER_CHANNEL,
+    Math.min(MAX_VIDEOS_PER_CHANNEL, prefs.videosPerChannel || DEFAULT_VIDEOS_PER_CHANNEL)
+  );
+
+  const state = await getIndexState();
+  const startDeep = added.length > 0 && state.deepStatus !== "indexing";
+  if (added.length > 0 && !startDeep) {
+    logger.warn(SOURCE, "deep index already running; new pins will be picked up on the next rebuild", { added });
+  }
+  // Flip status before anything slow (trims, possibly an interactive sign-in) so
+  // a watcher polling for progress never sees a gap and declares us finished early.
+  if (startDeep) {
+    await updateIndexState({ deepStatus: "indexing", deepProcessedChannels: 0, deepTotalChannels: added.length });
+  }
+
+  for (const channelId of removed) {
+    await trimChannelToBaseline(db, channelId, videosPerChannel);
+  }
+
+  if (!startDeep) {
+    await updateIndexState({ totalVideos: await db.table("videos").count() });
+    return;
+  }
+
+  try {
+    const token = await acquireToken(accountId, "applyPinChanges");
+    if (!token) {
+      await updateIndexState({ deepStatus: "error" });
+      return;
+    }
+    const onTokenExpired = makeTokenRefresher(accountId);
+
+    const channels = ((await db.table("channels").bulkGet(added)) as (Channel | undefined)[]).filter(
+      (c): c is Channel => c !== undefined
+    );
+    await updateIndexState({ deepTotalChannels: channels.length });
+
+    let processed = 0;
+    let failed = false;
+    await withConcurrency(channels, CONCURRENT_FETCHES, async (channel, abort) => {
+      if ((await checkQuota()) === "abort") {
+        logger.warn(SOURCE, "quota abort threshold reached, stopping deep index", { channelId: channel.id });
+        failed = true;
+        abort();
+        return;
+      }
+
+      const result = await fetchVideosForChannel(
+        token,
+        channel,
+        { maxVideos: DEEP_MAX_VIDEOS_PER_CHANNEL, publishedAfter: deepWindowStart() },
+        onTokenExpired
+      );
+      if (!result.ok) {
+        logger.warn(SOURCE, "deep index failed for channel", { channelId: channel.id, error: result.error });
+        failed = true;
+      } else {
+        await db.table("videos").bulkPut(result.value.videos);
+        await db.table("channels").put(channel);
+      }
+
+      processed += 1;
+      await updateIndexState({ deepProcessedChannels: processed, totalVideos: await db.table("videos").count() });
+    });
+
+    await updateIndexState({
+      deepStatus: failed ? "error" : "completed",
+      lastDeepIndexAt: new Date().toISOString(),
+      totalVideos: await db.table("videos").count(),
+    });
+    await broadcastIndexComplete();
+  } catch (err) {
+    logger.error(SOURCE, "applyPinChanges threw", { err: String(err) });
+    await updateIndexState({ deepStatus: "error" });
   }
 }
 
@@ -230,6 +356,7 @@ export async function runIncrementalRefresh(videosPerChannel = DEFAULT_VIDEOS_PE
       (c) => !c.lastVideoAt || new Date(c.lastVideoAt).getTime() >= activeCutoff
     );
 
+    const pinned = new Set(await getPinnedChannelIds(activeAccountId));
     const failedChannelIds = [...state.failedChannelIds];
 
     await withConcurrency(activeChannels, CONCURRENT_FETCHES, async (channel, abort) => {
@@ -242,10 +369,11 @@ export async function runIncrementalRefresh(videosPerChannel = DEFAULT_VIDEOS_PE
         return;
       }
 
+      // Same "since last sync" boundary for everyone; pinned channels just get a higher cap.
       const result = await fetchVideosForChannel(
         token,
         channel,
-        { maxVideos: videosPerChannel, publishedAfter },
+        { maxVideos: pinned.has(channel.id) ? DEEP_MAX_VIDEOS_PER_CHANNEL : videosPerChannel, publishedAfter },
         onTokenExpired
       );
       if (!result.ok) {

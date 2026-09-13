@@ -266,6 +266,14 @@
   background: #272727;
   color: #aaa;
 }
+.ss-result-pin {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: rgba(255, 0, 0, 0.15);
+  color: #ff6b6b;
+  font-weight: 500;
+}
 .ss-loading {
   padding: 32px 16px;
   text-align: center;

@@ -8,6 +8,14 @@ export const OAUTH_SCOPES = [
   "https://www.googleapis.com/auth/userinfo.profile",
 ];
 export const DEFAULT_VIDEOS_PER_CHANNEL = __DEFAULT_VIDEOS_PER_CHANNEL__;
+export const MIN_VIDEOS_PER_CHANNEL = 5;
+/** 4 pages of playlistItems (1 unit each) per channel — deep enough for a small-subscription user without pins. */
+export const MAX_VIDEOS_PER_CHANNEL = 200;
+
+// Pinned channels: full history on top of the all-channels baseline.
+export const MAX_PINNED_CHANNELS = 10;
+/** Safety ceiling per pinned channel: 40 pages = 40 units. Time window is DEFAULT_MAX_AGE_DAYS. */
+export const DEEP_MAX_VIDEOS_PER_CHANNEL = 2000;
 export const DAILY_QUOTA_LIMIT = __DAILY_QUOTA_LIMIT__;
 export const QUOTA_WARN_THRESHOLD = __QUOTA_WARN_THRESHOLD__;
 export const QUOTA_ABORT_THRESHOLD = __QUOTA_ABORT_THRESHOLD__;
@@ -32,6 +40,8 @@ export const STORAGE_KEY_ACCOUNTS = "subsearch_accounts";
 export const STORAGE_KEY_ACTIVE_ACCOUNT = "subsearch_active_account";
 export const STORAGE_KEY_FRESHNESS = "subsearch_freshness_months";
 export const STORAGE_KEY_FAB_INTRO_SEEN = "subsearch_fab_intro_seen";
+/** Per-account: `${prefix}${accountId}` → string[] of pinned channel IDs. */
+export const STORAGE_KEY_PINNED_PREFIX = "subsearch_pinned_";
 
 export const LOG_KEEP_INFO = 500;
 export const LOG_KEEP_WARN = 200;
