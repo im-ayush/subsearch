@@ -64,6 +64,18 @@ interface OverlayCallbacks {
   onSearch: (query: string, freshnessMonths: number) => void;
   onClose: () => void;
   onAutoOpenChange: (enabled: boolean) => void;
+  onOpenPinSettings: () => void;
+}
+
+export interface NoResultsInfo {
+  /** Matches that exist in the index but fall outside the active freshness window. */
+  hiddenByFreshness: number;
+  freshnessMonths: number;
+  videosPerChannel: number;
+}
+
+function freshnessLabel(months: number): string {
+  return FRESHNESS_OPTIONS.find((o) => o.months === months)?.label ?? `${months}-month`;
 }
 
 export class SearchOverlay {
@@ -269,6 +281,37 @@ export class SearchOverlay {
     if (!this.resultsList || !this.statusEl) return;
     this.resultsList.textContent = "";
     this.statusEl.textContent = query ? `No results for "${query}"` : "";
+  }
+
+  /**
+   * A zero-result search is where a new user decides the tool is broken. Say
+   * why it probably missed and put the fix one click away: widen the freshness
+   * window if that's what's hiding matches, otherwise explain the per-channel
+   * baseline and offer pinning.
+   */
+  showNoResults(query: string, info: NoResultsInfo): void {
+    if (!this.resultsList || !this.statusEl) return;
+    this.resultsList.textContent = "";
+    this.statusEl.textContent = `No results for "${query}"`;
+
+    const [emptyCls, hintCls, actionCls] = prefixed("empty", "empty-hint", "empty-action");
+    const block = el("li", [emptyCls]);
+    const hint = el("p", [hintCls]);
+    const action = el("button", [actionCls], { type: "button" });
+
+    if (info.hiddenByFreshness > 0) {
+      const n = info.hiddenByFreshness;
+      hint.textContent = `${n} older match${n === 1 ? "" : "es"} hidden by the ${freshnessLabel(info.freshnessMonths)} filter.`;
+      action.textContent = "Show all time";
+      action.addEventListener("click", () => void this.handleFilterChange(0));
+    } else {
+      hint.textContent = `Only the latest ${info.videosPerChannel} videos per channel are indexed, so older uploads won't appear unless their channel is pinned for full history.`;
+      action.textContent = "Pin a channel →";
+      action.addEventListener("click", () => this.callbacks.onOpenPinSettings());
+    }
+
+    block.append(hint, action);
+    this.resultsList.appendChild(block);
   }
 
   showNotIndexed(): void {

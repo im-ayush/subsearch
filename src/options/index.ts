@@ -388,6 +388,12 @@ async function init(): Promise<void> {
   await refreshSetup();
   await loadChannels();
 
+  // Arrived from the overlay's "Pin a channel →": land on the list, ready to type.
+  if (location.hash === "#pinned") {
+    getEl("pinned").scrollIntoView({ behavior: "smooth", block: "start" });
+    getEl<HTMLInputElement>("pin-search").focus({ preventScroll: true });
+  }
+
   // If a deep index is already running (e.g. page reopened mid-run), pick up its progress.
   const { state } = await sendMessage<Extract<BackgroundResponse, { type: "INDEX_STATE" }>>({ type: "GET_INDEX_STATE" });
   if (state.deepStatus === "indexing") pollDeepIndexProgress();

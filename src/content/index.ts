@@ -5,7 +5,7 @@ import { invalidateSearchIndex, searchVideos } from "../search/engine";
 import { SearchOverlay } from "./overlay";
 import { YouTubeRouter } from "./router";
 import type { BackgroundMessage, BackgroundResponse, TabMessage } from "../shared/messages";
-import type { IndexState, Video } from "../shared/types";
+import { DEFAULT_PREFERENCES, type IndexState, type Video } from "../shared/types";
 
 const SOURCE = "content";
 
@@ -16,6 +16,7 @@ let statePollingTimer: number | null = null;
 let fab: HTMLButtonElement | null = null;
 let fabCallout: HTMLElement | null = null;
 let fabIntroSeen: boolean | null = null;
+let videosPerChannel = DEFAULT_PREFERENCES.videosPerChannel;
 
 function sendToBackground<T extends BackgroundResponse = BackgroundResponse>(msg: BackgroundMessage): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -86,7 +87,19 @@ function handleSearch(query: string, freshnessMonths: number): void {
     return;
   }
   const results = searchVideos(allVideos, { query, freshnessMonths });
+  if (results.length === 0) {
+    // Only probe the wider window on a miss — it rebuilds the Fuse index over the full set.
+    const hiddenByFreshness = freshnessMonths !== 0 ? searchVideos(allVideos, { query, freshnessMonths: 0 }).length : 0;
+    overlay.showNoResults(query, { hiddenByFreshness, freshnessMonths, videosPerChannel });
+    return;
+  }
   overlay.renderResults(results);
+}
+
+function openPinSettings(): void {
+  void sendToBackground({ type: "OPEN_SETTINGS", section: "pinned" }).catch((err) => {
+    logger.warn(SOURCE, "could not open settings", { err: String(err) });
+  });
 }
 
 function shortcutLabel(): string {
@@ -198,9 +211,65 @@ function currentYouTubeQuery(): string {
   }
 }
 
+let staleNotice: HTMLElement | null = null;
+
+/**
+ * Shown when this script has been orphaned by an extension reload or a
+ * background auto-update. It can still touch the DOM but not the extension,
+ * so this is inline-styled: the page may be holding an older content.css.
+ */
+function showStaleNotice(): void {
+  if (staleNotice) return;
+  const notice = document.createElement("div");
+  notice.setAttribute("role", "status");
+  Object.assign(notice.style, {
+    position: "fixed",
+    right: "24px",
+    bottom: "84px",
+    zIndex: "2147483647",
+    display: "flex",
+    alignItems: "center",
+    gap: "12px",
+    padding: "12px 14px",
+    background: "#1c1c1c",
+    color: "#fff",
+    border: "1px solid #333",
+    borderRadius: "10px",
+    boxShadow: "0 8px 24px rgba(0,0,0,0.6)",
+    font: '13px "Roboto", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+  } satisfies Partial<CSSStyleDeclaration>);
+
+  const text = document.createElement("span");
+  text.textContent = "SubSearch was updated — refresh this page to use it.";
+
+  const refresh = document.createElement("button");
+  refresh.type = "button";
+  refresh.textContent = "Refresh";
+  Object.assign(refresh.style, {
+    padding: "6px 12px",
+    border: "none",
+    borderRadius: "16px",
+    background: "#ff0000",
+    color: "#fff",
+    font: "inherit",
+    fontWeight: "500",
+    cursor: "pointer",
+  } satisfies Partial<CSSStyleDeclaration>);
+  refresh.addEventListener("click", () => location.reload());
+
+  notice.append(text, refresh);
+  document.body.appendChild(notice);
+  staleNotice = notice;
+  window.setTimeout(() => {
+    notice.remove();
+    staleNotice = null;
+  }, 10_000);
+}
+
 async function openOverlay(): Promise<void> {
   if (!isExtensionContextValid()) {
-    logger.warn(SOURCE, "openOverlay: extension context invalidated, skipping (page needs a refresh)");
+    logger.warn(SOURCE, "openOverlay: extension context invalidated (page needs a refresh)");
+    showStaleNotice();
     return;
   }
   const query = currentYouTubeQuery();
@@ -210,11 +279,17 @@ async function openOverlay(): Promise<void> {
     return;
   }
   if (!overlay) {
-    overlay = new SearchOverlay({ onSearch: handleSearch, onClose: closeOverlay, onAutoOpenChange: handleAutoOpenChange });
+    overlay = new SearchOverlay({
+      onSearch: handleSearch,
+      onClose: closeOverlay,
+      onAutoOpenChange: handleAutoOpenChange,
+      onOpenPinSettings: openPinSettings,
+    });
   }
   try {
     hideFab();
     const prefs = await getUserPreferences();
+    videosPerChannel = prefs.videosPerChannel;
     await overlay.mount(prefs.overlayEnabled);
     overlay.showLoading();
     await loadVideoIndex();

@@ -165,6 +165,14 @@ async function handleMessage(
         return;
       }
 
+      case "OPEN_SETTINGS": {
+        // openOptionsPage() can't carry a fragment; a plain tab can, and the page scrolls to it.
+        const hash = message.section === "pinned" ? "#pinned" : "";
+        await chrome.tabs.create({ url: chrome.runtime.getURL(`options.html${hash}`) });
+        sendResponse({ type: "OK" });
+        return;
+      }
+
       case "FORCE_INCREMENTAL_REFRESH": {
         const prefs = await getUserPreferences();
         void runIncrementalRefresh(prefs.videosPerChannel);

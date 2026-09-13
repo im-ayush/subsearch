@@ -5,6 +5,7 @@ export type BackgroundMessage =
   | { type: "START_INDEX" }
   | { type: "GET_CHANNELS" }
   | { type: "SET_PINNED_CHANNELS"; channelIds: string[] }
+  | { type: "OPEN_SETTINGS"; section?: "pinned" }
   | { type: "GET_INDEX_STATE" }
   | { type: "GET_VIDEOS" }
   | { type: "GET_QUOTA_STATUS" }
