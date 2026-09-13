@@ -18,7 +18,7 @@ import {
   updateIndexState,
   upsertAccount,
 } from "../storage/db";
-import { fetchAccountInfo, getAuthToken } from "./auth";
+import { fetchAccountInfo, getAuthToken, getTokenForAccount } from "./auth";
 import { fetchSubscriptions, fetchUploadsPlaylistIds, fetchVideosForChannel, makeTokenRefresher } from "./api";
 import type { Channel, IndexState } from "../shared/types";
 import type { TabMessage } from "../shared/messages";
@@ -135,18 +135,20 @@ async function runSinglePhase(
  */
 export async function runFullIndex(targetAccountId?: string): Promise<void> {
   try {
-    let tokenResult = targetAccountId
-      ? await getAuthToken(false, targetAccountId)
-      : ({ ok: false, error: "no target account", retryable: false } as const);
-    if (!tokenResult.ok) {
-      tokenResult = await getAuthToken(true);
+    let token: string | null = null;
+    if (targetAccountId) {
+      const pinned = await getTokenForAccount(targetAccountId, "runFullIndex");
+      if (pinned.ok) token = pinned.value.token;
     }
-    if (!tokenResult.ok) {
-      logger.error(SOURCE, "runFullIndex: auth failed", { error: tokenResult.error });
-      await updateIndexState({ status: "error" });
-      return;
+    if (!token) {
+      const interactive = await getAuthToken(true);
+      if (!interactive.ok) {
+        logger.error(SOURCE, "runFullIndex: auth failed", { error: interactive.error });
+        await updateIndexState({ status: "error" });
+        return;
+      }
+      token = interactive.value.token;
     }
-    const token = tokenResult.value.token;
 
     const accountInfo = await fetchAccountInfo(token);
     if (!accountInfo) {
@@ -208,7 +210,7 @@ export async function runIncrementalRefresh(videosPerChannel = DEFAULT_VIDEOS_PE
   if (!activeAccountId) return;
 
   try {
-    const tokenResult = await getAuthToken(false, activeAccountId);
+    const tokenResult = await getTokenForAccount(activeAccountId, "runIncrementalRefresh");
     if (!tokenResult.ok) {
       logger.warn(SOURCE, "runIncrementalRefresh: auth failed", { error: tokenResult.error });
       return;

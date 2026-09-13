@@ -44,6 +44,7 @@ const NUMERIC_KEYS = new Set([
 
 const ALL_KEYS = [
   "OAUTH_CLIENT_ID",
+  "OAUTH_WEB_CLIENT_ID",
   ...NUMERIC_KEYS,
   "KOFI_USERNAME",
   "GUMROAD_URL",

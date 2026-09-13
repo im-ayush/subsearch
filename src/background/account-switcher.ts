@@ -1,6 +1,6 @@
 import { logger } from "../shared/logger";
-import { getAccountRegistry, getActiveAccountId, setActiveAccountId, upsertAccount } from "../storage/db";
-import { fetchAccountInfo, getAuthToken, getProfileIdentity, getTokenForAccount, revokeToken } from "./auth";
+import { getAccountRegistry, setActiveAccountId, upsertAccount } from "../storage/db";
+import { fetchAccountInfo, getTokenForAccount, launchAccountPicker, revokeToken, saveSessionToken } from "./auth";
 import type { Account, Result } from "../shared/types";
 
 const SOURCE = "account-switcher";
@@ -39,36 +39,29 @@ export async function switchToAccount(
 }
 
 /**
- * Signs in an account and registers it — no indexing. Revoking the active
- * account's token first is what forces Google to show the chooser; with a
- * live grant it would hand back the same identity silently and the picker
- * would never appear. Google may still auto-pick the most recently used
- * account, so callers compare the returned id against what they already had.
+ * Signs in an account and registers it — no indexing. Goes through
+ * launchWebAuthFlow with prompt=select_account so Google's chooser appears
+ * every time, regardless of which identity Chrome considers primary. No token
+ * revocation needed: the chooser is forced by the prompt parameter, not by
+ * destroying the existing account's grant.
  */
 export async function addNewAccount(): Promise<Result<Account>> {
-  const activeAccountId = await getActiveAccountId();
-  const cached = await getAuthToken(false, activeAccountId ?? undefined);
-  if (cached.ok) {
-    await revokeToken(cached.value.token);
+  const authResult = await launchAccountPicker();
+  if (!authResult.ok) {
+    logger.warn(SOURCE, "addNewAccount: auth failed", { error: authResult.error });
+    return { ok: false, error: authResult.error, retryable: false };
   }
 
-  const profile = await getProfileIdentity();
-  logger.info(SOURCE, "addNewAccount: Chrome profile identity", { profile });
-
-  const tokenResult = await getAuthToken(true);
-  if (!tokenResult.ok) {
-    logger.warn(SOURCE, "addNewAccount: auth failed", { error: tokenResult.error });
-    return { ok: false, error: tokenResult.error, retryable: false };
-  }
-
-  const info = await fetchAccountInfo(tokenResult.value.token);
+  const info = await fetchAccountInfo(authResult.value.token);
   if (!info) {
     logger.warn(SOURCE, "addNewAccount: could not identify account");
     return { ok: false, error: "Could not identify the signed-in account", retryable: false };
   }
 
+  await saveSessionToken(info.id, authResult.value.token, authResult.value.expiresIn);
   const account: Account = { ...info, addedAt: Date.now() };
   await upsertAccount(account);
   await setActiveAccountId(account.id);
+  logger.info(SOURCE, "account added", { email: account.email });
   return { ok: true, value: account };
 }

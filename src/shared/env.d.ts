@@ -1,6 +1,7 @@
 // Inlined by esbuild.config.js via `define` from .env at build time.
 // Not secret at runtime — see .env.example.
 declare const __OAUTH_CLIENT_ID__: string;
+declare const __OAUTH_WEB_CLIENT_ID__: string;
 declare const __DEFAULT_VIDEOS_PER_CHANNEL__: number;
 declare const __DAILY_QUOTA_LIMIT__: number;
 declare const __QUOTA_WARN_THRESHOLD__: number;

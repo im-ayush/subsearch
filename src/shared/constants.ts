@@ -1,5 +1,12 @@
 // Build-time config, inlined via esbuild `define` from `.env`. See env.d.ts.
 export const OAUTH_CLIENT_ID = __OAUTH_CLIENT_ID__;
+/** "Web application" client — only this type can register a redirect URI, which launchWebAuthFlow requires. */
+export const OAUTH_WEB_CLIENT_ID = __OAUTH_WEB_CLIENT_ID__;
+export const OAUTH_SCOPES = [
+  "https://www.googleapis.com/auth/youtube.readonly",
+  "https://www.googleapis.com/auth/userinfo.email",
+  "https://www.googleapis.com/auth/userinfo.profile",
+];
 export const DEFAULT_VIDEOS_PER_CHANNEL = __DEFAULT_VIDEOS_PER_CHANNEL__;
 export const DAILY_QUOTA_LIMIT = __DAILY_QUOTA_LIMIT__;
 export const QUOTA_WARN_THRESHOLD = __QUOTA_WARN_THRESHOLD__;
