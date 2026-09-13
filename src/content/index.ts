@@ -115,12 +115,25 @@ function isExtensionContextValid(): boolean {
   }
 }
 
+function currentYouTubeQuery(): string {
+  try {
+    return new URL(location.href).searchParams.get("search_query")?.trim() ?? "";
+  } catch {
+    return "";
+  }
+}
+
 async function openOverlay(): Promise<void> {
   if (!isExtensionContextValid()) {
     logger.warn(SOURCE, "openOverlay: extension context invalidated, skipping (page needs a refresh)");
     return;
   }
-  if (overlay?.isOpen()) return;
+  const query = currentYouTubeQuery();
+  if (overlay?.isOpen()) {
+    // Already open (e.g. browser back/forward changed the results URL underneath it) — just re-run.
+    if (query) overlay.setQuery(query);
+    return;
+  }
   if (!overlay) {
     overlay = new SearchOverlay({ onSearch: handleSearch, onClose: closeOverlay });
   }
@@ -131,6 +144,7 @@ async function openOverlay(): Promise<void> {
     await loadVideoIndex();
     if (indexState) overlay.updateStatus(indexState, allVideos.length);
     if (indexState?.status === "indexing") startStatePolling();
+    if (query) overlay.setQuery(query);
   } catch (err) {
     logger.warn(SOURCE, "openOverlay failed, likely stale extension context", { err: String(err) });
   }

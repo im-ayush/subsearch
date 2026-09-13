@@ -170,6 +170,13 @@ export class SearchOverlay {
     });
   }
 
+  /** Prefills the box and searches at once — no debounce, since the query is already known. */
+  setQuery(query: string): void {
+    if (!this.input) return;
+    this.input.value = query;
+    this.callbacks.onSearch(query.trim(), this.activeFreshnessMonths);
+  }
+
   private handleKeydown = (e: KeyboardEvent): void => {
     if (e.key === "Escape" && this.isOpen()) this.callbacks.onClose();
   };
