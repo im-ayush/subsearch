@@ -1,6 +1,7 @@
 import { DEFAULT_PREFERENCES, type ChannelSummary } from "../shared/types";
 import { API_PAGE_SIZE, DEEP_MAX_VIDEOS_PER_CHANNEL, MAX_VIDEOS_PER_CHANNEL, MIN_VIDEOS_PER_CHANNEL } from "../shared/constants";
 import { getUserPreferences, setUserPreferences } from "../shared/preferences";
+import { formatIndexStatus, isBusy } from "../shared/status";
 import type { BackgroundMessage, BackgroundResponse } from "../shared/messages";
 
 function getEl<T extends HTMLElement = HTMLElement>(id: string): T {
@@ -23,6 +24,132 @@ function sendMessage<T extends BackgroundResponse = BackgroundResponse>(msg: Bac
       resolve(response);
     });
   });
+}
+
+// ── Setup: account + index ───────────────────────────────────────────────
+
+let setupPollTimer: number | null = null;
+/** Keep polling until this time even if not yet busy — START_INDEX returns before indexing (or its sign-in prompt) starts. */
+let setupPollUntil = 0;
+// Completion is detected by lastFullIndexAt changing, not by catching a "busy"
+// tick: a small account can finish an entire index inside one 2s poll gap.
+// `undefined` = nothing observed yet for the current account.
+let lastSeenFullIndexAt: string | null | undefined = undefined;
+let lastSeenStatus: string | undefined = undefined;
+
+function resetSetupTracking(): void {
+  lastSeenFullIndexAt = undefined;
+  lastSeenStatus = undefined;
+}
+
+function setSetupMsg(text: string, tone: "" | "ok" | "err" = ""): void {
+  const el = getEl("setup-msg");
+  el.textContent = text;
+  el.className = tone ? `pin-status ${tone}` : "pin-status";
+}
+
+function stopSetupPolling(): void {
+  if (setupPollTimer !== null) window.clearInterval(setupPollTimer);
+  setupPollTimer = null;
+}
+
+async function refreshSetup(): Promise<void> {
+  const [accountsResp, stateResp] = await Promise.all([
+    sendMessage<Extract<BackgroundResponse, { type: "ACCOUNTS" }>>({ type: "GET_ACCOUNTS" }),
+    sendMessage<Extract<BackgroundResponse, { type: "INDEX_STATE" }>>({ type: "GET_INDEX_STATE" }),
+  ]);
+  const { accounts, activeAccountId } = accountsResp;
+  const { state, pinnedCount } = stateResp;
+
+  const noAccount = getEl("setup-no-account");
+  const hasAccount = getEl("setup-account");
+  noAccount.hidden = accounts.length > 0;
+  hasAccount.hidden = accounts.length === 0;
+  if (accounts.length === 0) return;
+
+  const select = getEl<HTMLSelectElement>("setup-account-select");
+  select.textContent = "";
+  for (const account of [...accounts].sort((a, b) => a.email.localeCompare(b.email))) {
+    const option = document.createElement("option");
+    option.value = account.id;
+    option.textContent = account.displayName ? `${account.displayName} — ${account.email}` : account.email;
+    option.selected = account.id === activeAccountId;
+    select.appendChild(option);
+  }
+
+  getEl("setup-status").textContent = formatIndexStatus(state, pinnedCount);
+
+  const busy = isBusy(state);
+  const indexBtn = getEl<HTMLButtonElement>("setup-index-btn");
+  indexBtn.disabled = busy;
+  indexBtn.textContent = busy ? "Indexing…" : state.lastFullIndexAt ? "Rebuild index" : "Build index";
+  select.disabled = busy;
+  getEl<HTMLButtonElement>("setup-add-account-btn").disabled = busy;
+
+  const finished = lastSeenFullIndexAt !== undefined && state.lastFullIndexAt !== lastSeenFullIndexAt;
+  const errored = lastSeenStatus !== undefined && lastSeenStatus !== "error" && state.status === "error";
+  lastSeenFullIndexAt = state.lastFullIndexAt;
+  lastSeenStatus = state.status;
+
+  // The pin list depends on the index: refresh it the moment a run finishes.
+  if (finished) {
+    setupPollUntil = 0;
+    await loadChannels();
+    setSetupMsg("Index ready. Pin channels below for full history.", "ok");
+  } else if (errored) {
+    setupPollUntil = 0;
+    setSetupMsg("Indexing hit an error — see the popup's debug log.", "err");
+  }
+
+  const keepPolling = busy || Date.now() < setupPollUntil;
+  if (keepPolling && setupPollTimer === null) {
+    setupPollTimer = window.setInterval(() => void refreshSetup().catch(stopSetupPolling), 2000);
+  } else if (!keepPolling) {
+    stopSetupPolling();
+  }
+}
+
+async function connectAccount(): Promise<void> {
+  const buttons = [getEl<HTMLButtonElement>("setup-connect-btn"), getEl<HTMLButtonElement>("setup-add-account-btn")];
+  for (const b of buttons) b.disabled = true;
+  setSetupMsg("Waiting for Google sign-in…");
+  try {
+    const response = await sendMessage<Extract<BackgroundResponse, { type: "ADD_ACCOUNT_RESULT" }>>({ type: "ADD_ACCOUNT" });
+    if (!response.ok || !response.account) {
+      setSetupMsg(response.error ?? "Sign-in was cancelled or failed.", "err");
+    } else {
+      setSetupMsg(`Connected ${response.account.email}. Now build the index.`, "ok");
+    }
+  } catch (err) {
+    setSetupMsg(`Sign-in failed: ${String(err)}`, "err");
+  } finally {
+    for (const b of buttons) b.disabled = false;
+  }
+  resetSetupTracking();
+  await refreshSetup();
+  await loadChannels();
+}
+
+async function switchAccount(accountId: string): Promise<void> {
+  const response = await sendMessage<Extract<BackgroundResponse, { type: "SWITCH_ACCOUNT_RESULT" }>>({
+    type: "SWITCH_ACCOUNT",
+    accountId,
+  });
+  if (response.needsAuth) {
+    setSetupMsg("Switched — sign-in will be requested when you next build the index.", "");
+  } else {
+    setSetupMsg("");
+  }
+  resetSetupTracking();
+  await refreshSetup();
+  await loadChannels();
+}
+
+async function startIndex(): Promise<void> {
+  setSetupMsg("");
+  setupPollUntil = Date.now() + 120_000;
+  await sendMessage({ type: "START_INDEX" });
+  await refreshSetup();
 }
 
 // ── Pinned channels ──────────────────────────────────────────────────────
@@ -69,7 +196,7 @@ function renderPinList(): void {
   if (allChannels.length === 0) {
     const empty = document.createElement("div");
     empty.className = "pin-empty";
-    empty.textContent = "Build your index first — pinned channels are chosen from your subscriptions.";
+    empty.textContent = "Your channels will appear here once you've built an index (Account & Index, above).";
     list.appendChild(empty);
     return;
   }
@@ -248,8 +375,17 @@ async function init(): Promise<void> {
     showSaved();
   });
 
+  getEl("setup-connect-btn").addEventListener("click", () => void connectAccount());
+  getEl("setup-add-account-btn").addEventListener("click", () => void connectAccount());
+  getEl("setup-index-btn").addEventListener("click", () => void startIndex());
+  getEl<HTMLSelectElement>("setup-account-select").addEventListener("change", (e) => {
+    void switchAccount((e.target as HTMLSelectElement).value);
+  });
+
   getEl("pin-search").addEventListener("input", renderPinList);
   getEl("pin-save-btn").addEventListener("click", () => void savePins());
+
+  await refreshSetup();
   await loadChannels();
 
   // If a deep index is already running (e.g. page reopened mid-run), pick up its progress.

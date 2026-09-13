@@ -1,5 +1,6 @@
 import { MONETIZATION } from "../monetization/config";
 import { getUserPreferences, setUserPreferences } from "../shared/preferences";
+import { formatIndexStatus, isBusy } from "../shared/status";
 import type { BackgroundMessage, BackgroundResponse } from "../shared/messages";
 import type { Account, IndexState, LogEntry } from "../shared/types";
 
@@ -166,22 +167,8 @@ async function handleAccountSwitch(accountId: string): Promise<void> {
 // ── Status / progress / quota ───────────────────────────────────────────
 
 function formatStatus(state: IndexState, pinnedCount: number): string {
-  if (state.status === "idle" && !state.lastFullIndexAt) {
-    return 'Not indexed yet — click "Build Index"';
-  }
-  if (state.status === "indexing") {
-    const pct = state.totalChannels > 0 ? Math.round((state.processedChannels / state.totalChannels) * 100) : 0;
-    return `Indexing… ${state.processedChannels}/${state.totalChannels} channels (${pct}%)`;
-  }
-  if (state.deepStatus === "indexing") {
-    return `Deep-indexing pinned channels… ${state.deepProcessedChannels}/${state.deepTotalChannels}`;
-  }
-  if (state.status === "error") {
-    return "Index error — retry or check console for details";
-  }
-  const last = state.lastFullIndexAt ? new Date(state.lastFullIndexAt).toLocaleString() : "never";
-  const pinned = pinnedCount > 0 ? ` · ${pinnedCount} pinned` : "";
-  return `${state.totalVideos.toLocaleString()} videos · ${state.totalChannels} channels${pinned} · last synced ${last}`;
+  if (state.status === "idle" && !state.lastFullIndexAt) return 'Not indexed yet — click "Build Index"';
+  return formatIndexStatus(state, pinnedCount);
 }
 
 function renderProgressBar(state: IndexState): void {
@@ -214,7 +201,7 @@ async function refreshStatus(): Promise<void> {
 
   const indexBtn = getEl<HTMLButtonElement>("index-btn");
   const refreshBtn = getEl<HTMLButtonElement>("refresh-btn");
-  const indexing = state.status === "indexing" || state.deepStatus === "indexing";
+  const indexing = isBusy(state);
   indexBtn.disabled = indexing;
   indexBtn.textContent = indexing ? "▶ Indexing…" : state.lastFullIndexAt ? "▶ Rebuild Index" : "▶ Build Index";
   refreshBtn.style.display = state.lastFullIndexAt ? "inline-flex" : "none";
